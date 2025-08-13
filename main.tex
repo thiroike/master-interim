@@ -5,6 +5,7 @@
 \usepackage{booktabs}
 \usepackage{multirow}
 \usepackage{cite}
+\usepackage{amsmath, amssymb}
 
 % Title info. ======================================
 \title{適応的PolyDice-1 Lossの提案と\\
@@ -75,6 +76,16 @@ g(i) = {\left(\frac{i}{b}\right)}^\gamma
 \subsection{図の挿入}
 図の使用例を次に示します．
 \newline
+
+Dice Lossは予測画像と正解画像との類似度を測るDice Indexに基づいて定義される．
+$W \times H$（pixel）のモデルの予測画像を$\hat{\mathbf{y}} \in \mathbb R ^ {W \times H}$，
+その画像に対する正解画像を$\mathbf{y} \in \mathbb R ^ {W \times H}$とすると，
+Dice Lossは下記の式で示される．
+
+\begin{equation}
+  \mathcal{L}_{\text{Dice}}(\hat{\mathbf{y}}, \mathbf{y}) = 1 - \frac{2 \sum_{i=1}^{W} \sum_{j=1}^{H} \hat{y}_{ij} y_{ij}}{\hat{y_{ij}} ^ 2 + y_{ij} ^ 2}
+\end{equation}
+
 
 東広島キャンパスでは，図\ref{fig:campus}に示すように，
 初夏にはアメリカ楓の美しい並木が緑に輝く．
