@@ -8,8 +8,8 @@
 \usepackage{amsmath, amssymb}
 
 % Title info. ======================================
-\title{適応的PolyDice-1 Lossの提案と\\
-医療画像セグメンテーションへの応用}
+\title{不確実性適応型損失関数による \\
+頑健な医用画像セグメンテーション}
 
 %%%%% 著者 %%%%%
 \author{廣池 友哉}
@@ -34,42 +34,107 @@
 
 %%% Please write your body text from here %%
 \section{はじめに}
-修士論文中間発表予稿の様式サンプルです．
+セマンティックセグメンテーションは，画像中の全てのピクセルに対し
+物体のクラスのラベルを推定するタスクである．
+特に医用画像の分野においては心臓MRIなどに用いられており，
 
+しかし，医用画像セグメンテーションでは，画像全体に対する関心領域が
+極小であるクラス不均衡という課題がある．
 
-発表予稿を\TeX{}で作成する場合は，
-スタイルファイル\verb+proceedings_bachelor.sty+を利用してください．
+この課題に対処するため，少数クラスを考慮した学習を行うことができる損失関数が考案されてきた．
+しかし，これらのアプローチでは検出難易度に関わらず誤差関数の形状が固定されており，
+画像によって最適な重みづけがされていないことが課題だった．
 
+そこで本研究では，検出難易度を画像毎に算出したものを学習に取り入れ，
+誤差関数の形状を動的に変化させる手法を提案する．
 
-その他の方法で発表予稿を作成する場合は，この様式を参考にしてください．
+本研究の最終的な目的は，画像毎のセグメンテーションの難易度指標を算出したものを学習に取り入れ，
+誤差関数の形状を動的に変化させることである．その実現に向けた最初のステップとして，
+本稿では難易度指標が学習が進むにつれてどのように推移するかを検証する．
 
+\section{提案法}
+図に提案法の概略図を示す．
+提案法は，まず学習中に一定epoch毎に推論フェーズを挿入し，MC Dropoutにより複数枚の予測画像を得た後，
+ピクセル単位で不確実性を計算し，画像全体の不確実性を難易度指標として算出する．
 
-ただし，研究分野で特有の書式がある場合には，その様式に従ってください．
+\subsection{PolyDice-1 Lossの説明}
 
+\subsubsection{Polynomial Dice Lossの導出}
+Dice Lossを拡張し多項式展開することを考える．
+$W \times H$（pixel）の画像に対し，
+予測画像を$\hat{\mathbf{y}} \in \mathbb R ^ {W \times H}$，
+その画像に対する正解画像を$\mathbf{y} \in \mathbb R ^ {W \times H}$とし，
+位置$i, j$における画素値をそれぞれ添字$i, j$を用いて$\hat{y}_{ij}, {y}_{ij}$と表現すると，Dice Lossは下記の式で示される．
 
-\section{数式の記述}
-数式の記述例を次に示します．
-
-
-本研究では，前節での調査結果から，光源スペクトルの周波数成分に基づいて波長サンプル組数を決定する．
-すなわち，光源スペクトルをフーリエ変換した高周波数成分を重み付け加算した値を用いて
-波長サンプル組数$S$を，次式により決定する．
-%
 \begin{equation}
-S = a\sum_{i=0}^{n}F(i)g(i)+c
+  \mathcal{L}_{\text{Dice}}(\hat{\mathbf{y}}, \mathbf{y}) = 1 - \frac{2 \sum_{i=1}^{W} \sum_{j=1}^{H} \hat{y}_{ij} y_{ij}}{\sum_{i=1}^{W} \sum_{j=1}^{H}(\hat{y_{ij}} ^ 2 + y_{ij} ^ 2)}
+\end{equation}
+
+ここで予測画像$\hat{\mathbf{y}}$と正解画像$\mathbf{y}$をそれぞれ一次元のベクトル$\hat{\mathbf{y}} ^ {\prime}, {\mathbf{y}} ^ {\prime}$
+に平坦化し，L2ノルム$\Vert \cdot \Vert$と内積$\langle \cdot, \cdot \rangle $を用いて
+Dice Lossは次式のように表現することができる．
+\begin{equation}
+  \begin{aligned}
+    \mathcal{L}_{\text{Dice}} &= 1 - \frac{2 \langle \hat{\mathbf{y}} ^ {\prime}, {\mathbf{y}} ^ {\prime} \rangle}{\Vert \hat{\mathbf{y}} ^ {\prime} \Vert ^ 2 + \Vert {\mathbf{y}} ^ {\prime} \Vert ^ 2} \\
+    &= 1 - \frac{2 \Vert \hat{\mathbf{y}} ^ {\prime} \Vert \Vert {\mathbf{y}} ^ {\prime} \Vert}{\Vert \hat{\mathbf{y}} ^ {\prime} \Vert ^ 2 + \Vert {\mathbf{y}} ^ {\prime} \Vert ^ 2}
+    \times \frac{\langle \hat{\mathbf{y}} ^ {\prime}, {\mathbf{y}} ^ {\prime} \rangle}{\Vert \hat{\mathbf{y}} ^ {\prime} \Vert \Vert {\mathbf{y}} ^ {\prime} \Vert}
+  \end{aligned}
+\end{equation}
+
+この式において，$s = \frac{2 \langle \hat{\mathbf{y}} ^ {\prime}, {\mathbf{y}} ^ {\prime} \rangle}{\Vert \hat{\mathbf{y}} ^ {\prime} \Vert ^ 2 + \Vert {\mathbf{y}} ^ {\prime} \Vert ^ 2}$，
+$\theta = \frac{\langle \hat{\mathbf{y}} ^ {\prime}, {\mathbf{y}} ^ {\prime} \rangle}{\Vert \hat{\mathbf{y}} ^ {\prime} \Vert \Vert {\mathbf{y}} ^ {\prime} \Vert}$とおくと，
+Dice Lossは2つの成分，すなわちベクトル間の角度$\theta$に基づく方向成分（コサイン類似度）と，
+ベクトルの大きさに基づくスケール成分$s$から構成されていることがわかる．
+両方のベクトルが単位ノルムである場合、スケール成分$s=1$となり，Dice Lossはコサイン類似度そのものと一致する．
+$\mathcal{L}_{\text{Dice}} = 1 - s \cos{\theta}$となる．
+ここで，$\theta$は予測ベクトルと正解ベクトルのなす角であり，予測と正解が大きく変わらない，
+つまり$\theta \approx 0$と仮定し，$\cos{\theta}$を$\theta = 0$まわりでテイラー展開すると以下のように近似できる．
+\begin{equation}
+  \cos{\theta} = 1 - \frac{\theta ^ 2}{2!} + \frac{\theta ^ 4}{4!} - \cdots
+\end{equation}
+
+スケール成分$s$を一定と仮定し，この近似式をDice Lossに代入して整理すると，以下のようになる．
+
+\begin{equation}
+  \begin{aligned}
+  \mathcal{L}_{\text{Dice}} &= 1 - s \left(1 + \frac{1}{2!} \theta ^ 2 - \frac{1}{4!} \theta ^ 4 + \cdots\right) \\
+  &= (1 - s) + s \left[\sum_{k = 1}^{\infty} \frac{(-1) ^ {k - 1}}{(2k)!} \theta ^ {2k}\right]
+\end{aligned}
+\end{equation}
+
+ここで，各テイラー項の係数$\alpha_k$を$\alpha_k = \frac{(-1)^{k-1}}{(2k)!}$とすると，
+Dice Lossを多項式展開したPolynomial Dice Lossは以下のように表現できる．
+
+\begin{equation}
+  \mathcal{L}_{\text{PolyDice}} = (1 - s) + s \sum_{k = 1}^{\infty} \alpha_k \theta ^ {2k}
+\end{equation}
+
+この損失関数を計算するために、角度$\theta$は以下のようにコサインの逆関数を用いて算出される．
+\begin{equation}
+  \theta = \arccos{\left(\frac{\langle \hat{\mathbf{y}} ^ {\prime}, {\mathbf{y}} ^ {\prime} \rangle}{\Vert \hat{\mathbf{y}} ^ {\prime} \Vert \Vert {\mathbf{y}} ^ {\prime} \Vert}\right)}
+\end{equation}
+
+このようにして，Dice Lossを幾何学的に解釈したうえでテイラー展開を用いることでPolynomial Dice Lossが導かれる．
+
+
+\subsubsection{PolyDice-1 Lossの導出}
+PolyLossのアプローチに倣い，多項式の次数に基づいてPolynomial Dice Lossのバリエーションを検討する．
+まず，テイラー展開で得られた無限級数を第$K$項までで打ち切ることで，以下のような損失関数を定義する：
+
+\begin{equation}
+  \mathcal{L}_{\text{PolyDice-K}} = \mathcal{L}_{\text{PolyDice}} + s \sum_{k=1}^{K} \varepsilon_k \theta^{2k}
 \end{equation}
 %
-ここで，$a$は重み付け加算した高周波成分に対する寄与係数，
-$c$は最小波長サンプリング組数，
-$F(i)$は第$i$調波成分の値，$n$は最大高周波，
-$g(i)$は高周波成分に対する重み関数であり，次式とする．
 %
+しかし，これらのハイパーパラメータ$\varepsilon$を調整するのは難しく，
+特に医用画像セグメンテーションでは交差検証による検証が用いられるため，このような複雑なチューニングは実用的ではない．
+Leng らは，第$1$項（$\theta ^ 2$）のみを調整するだけで十分な性能向上が得られることを示し，よりチューニングが容易なケース$K=1$の損失関数を提案している．
+これに従い，以下のようにPolyDice-1 Lossを定義する．
+
 \begin{equation}
-g(i) = {\left(\frac{i}{b}\right)}^\gamma
+  \mathcal{L}_{\text{PolyDice-1}} = (1 - s) + s(\alpha_1 + \epsilon_1) \theta^2
 \end{equation}
-%
-ここで，$b$は重み付け関数の調整係数，$\gamma$は重み付け関数べき乗係数である．
-本研究では，前節での調査結果に基づき$a=2.1$，$b=100$，$c=5$，$\gamma=0.25$に設定した．
+
 \newpage
 
 \section{図表について}
@@ -83,7 +148,7 @@ $W \times H$（pixel）のモデルの予測画像を$\hat{\mathbf{y}} \in \math
 Dice Lossは下記の式で示される．
 
 \begin{equation}
-  \mathcal{L}_{\text{Dice}}(\hat{\mathbf{y}}, \mathbf{y}) = 1 - \frac{2 \sum_{i=1}^{W} \sum_{j=1}^{H} \hat{y}_{ij} y_{ij}}{\hat{y_{ij}} ^ 2 + y_{ij} ^ 2}
+  \mathcal{L}_{\text{Dice}}(\hat{\mathbf{y}}, \mathbf{y}) = 1 - \frac{2 \sum_{i=1}^{W} \sum_{j=1}^{H} \hat{y}_{ij} y_{ij}}{\sum_{i=1}^{W} \sum_{j=1}^{H} (aa \hat{y_{ij}} ^ 2 + y_{ij} ^ 2)}
 \end{equation}
 
 
