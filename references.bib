@@ -13,3 +13,136 @@
   year={2001},
   publisher={Ak Peters Natick}
 }
+
+
+@InProceedings{pmlr-v48-gal16,
+  title = 	 {Dropout as a Bayesian Approximation: Representing Model Uncertainty in Deep Learning},
+  author = 	 {Gal, Yarin and Ghahramani, Zoubin},
+  booktitle = 	 {Proceedings of The 33rd International Conference on Machine Learning},
+  pages = 	 {1050--1059},
+  year = 	 {2016},
+  editor = 	 {Balcan, Maria Florina and Weinberger, Kilian Q.},
+  volume = 	 {48},
+  series = 	 {Proceedings of Machine Learning Research},
+  address = 	 {New York, New York, USA},
+  month = 	 {20--22 Jun},
+  publisher =    {PMLR},
+  pdf = 	 {http://proceedings.mlr.press/v48/gal16.pdf},
+  url = 	 {https://proceedings.mlr.press/v48/gal16.html},
+  abstract = 	 {Deep learning tools have gained tremendous attention in applied machine learning. However such tools for regression and classification do not capture model uncertainty. In comparison, Bayesian models offer a mathematically grounded framework to reason about model uncertainty, but usually come with a prohibitive computational cost. In this paper we develop a new theoretical framework casting dropout training in deep neural networks (NNs) as approximate Bayesian inference in deep Gaussian processes. A direct result of this theory gives us tools to model uncertainty with dropout NNs – extracting information from existing models that has been thrown away so far. This mitigates the problem of representing uncertainty in deep learning without sacrificing either computational complexity or test accuracy. We perform an extensive study of the properties of dropout’s uncertainty. Various network architectures and non-linearities are assessed on tasks of regression and classification, using MNIST as an example. We show a considerable improvement in predictive log-likelihood and RMSE compared to existing state-of-the-art methods, and finish by using dropout’s uncertainty in deep reinforcement learning.}
+}
+
+@article{KATO2024107695,
+title = {Adaptive t-vMF dice loss: An effective expansion of dice loss for medical image segmentation},
+journal = {Computers in Biology and Medicine},
+volume = {168},
+pages = {107695},
+year = {2024},
+issn = {0010-4825},
+doi = {https://doi.org/10.1016/j.compbiomed.2023.107695},
+url = {https://www.sciencedirect.com/science/article/pii/S0010482523011605},
+author = {Sota Kato and Kazuhiro Hotta},
+keywords = {Computer vision, Pattern recognition, Deep learning, Medical image, Polyp segmentation, Multi-organ segmentation, Dice loss, T-vMF similarity},
+abstract = {Dice loss is widely used for medical image segmentation, and many improved loss functions have been proposed. However, further Dice loss improvements are still possible. In this study, we reconsidered the use of Dice loss and discovered that Dice loss can be rewritten in the loss function using the cosine similarity through a simple equation transformation. Using this knowledge, we present a novel t-vMF Dice loss based on the t-vMF similarity instead of the cosine similarity. Based on the t-vMF similarity, our proposed Dice loss is formulated in a more compact similarity loss function than the original Dice loss. Furthermore, we present an effective algorithm that automatically determines the parameter κ for the t-vMF similarity using a validation accuracy, called Adaptive t-vMF Dice loss. Using this algorithm, it is possible to apply more compact similarities for easy classes and wider similarities for difficult classes, and we are able to achieve adaptive training based on the accuracy of each class. We evaluated binary segmentation datasets of CVC-ClinicDB and Kvasir-SEG, and multi-class segmentation datasets of Automated Cardiac Diagnosis Challenge and Synapse multi-organ segmentation. Through experiments conducted on four datasets using a five-fold cross-validation, we confirmed that the Dice score coefficient (DSC) was further improved in comparison with the original Dice loss and other loss functions.}
+}
+
+@inproceedings{leng2022polyloss,
+  title     = {PolyLoss: A polynomial expansion perspective of classification loss functions},
+  author    = {Leng, Zhaowei and Tan, Mingxing and Liu, Chenxi and Cubuk, Ekin Dogus and Shi, Jiquan and Cheng, Shuyang and Anguelov, Dragomir},
+  booktitle = {International Conference on Learning Representations},
+  year      = {2022},
+  url       = {https://openreview.net/forum?id=gSdSJoenupI}
+}
+
+@article{BERNAL201599,
+title = {WM-DOVA maps for accurate polyp highlighting in colonoscopy: Validation vs. saliency maps from physicians},
+journal = {Computerized Medical Imaging and Graphics},
+volume = {43},
+pages = {99-111},
+year = {2015},
+issn = {0895-6111},
+doi = {https://doi.org/10.1016/j.compmedimag.2015.02.007},
+url = {https://www.sciencedirect.com/science/article/pii/S0895611115000567},
+author = {Jorge Bernal and F. Javier Sánchez and Gloria Fernández-Esparrach and Debora Gil and Cristina Rodríguez and Fernando Vilariño},
+keywords = {Polyp localization, Energy maps, Colonoscopy, Saliency, Valley detection},
+abstract = {We introduce in this paper a novel polyp localization method for colonoscopy videos. Our method is based on a model of appearance for polyps which defines polyp boundaries in terms of valley information. We propose the integration of valley information in a robust way fostering complete, concave and continuous boundaries typically associated to polyps. This integration is done by using a window of radial sectors which accumulate valley information to create WM-DOVA (Window Median Depth of Valleys Accumulation) energy maps related with the likelihood of polyp presence. We perform a double validation of our maps, which include the introduction of two new databases, including the first, up to our knowledge, fully annotated database with clinical metadata associated. First we assess that the highest value corresponds with the location of the polyp in the image. Second, we show that WM-DOVA energy maps can be comparable with saliency maps obtained from physicians’ fixations obtained via an eye-tracker. Finally, we prove that our method outperforms state-of-the-art computational saliency results. Our method shows good performance, particularly for small polyps which are reported to be the main sources of polyp miss-rate, which indicates the potential applicability of our method in clinical practice.}
+}
+
+@inproceedings{ronneberger2015u,
+  title={U-net: Convolutional networks for biomedical image segmentation},
+  author={Ronneberger, Olaf and Fischer, Philipp and Brox, Thomas},
+  booktitle={International Conference on Medical image computing and computer-assisted intervention},
+  pages={234--241},
+  year={2015},
+  organization={Springer}
+}
+
+@inproceedings{kingma2014adam,
+  title     = {Adam: A Method for Stochastic Optimization},
+  author    = {Kingma, Diederik P. and Ba, Jimmy},
+  booktitle = {Proceedings of the 3rd International Conference on Learning Representations (ICLR)},
+  year      = {2015},
+  url       = {https://arxiv.org/abs/1412.6980}
+}
+
+@inproceedings{long2015fully,
+  title={Fully convolutional networks for semantic segmentation},
+  author={Long, Jonathan and Shelhamer, Evan and Darrell, Trevor},
+  booktitle={Proceedings of the IEEE conference on computer vision and pattern recognition},
+  pages={3431--3440},
+  year={2015}
+}
+
+@inproceedings{milletari2016v,
+  title={V-net: Fully convolutional neural networks for volumetric medical image segmentation},
+  author={Milletari, Fausto and Navab, Nassir and Ahmadi, Seyed-Ahmad},
+  booktitle={2016 fourth international conference on 3D vision (3DV)},
+  pages={565--571},
+  year={2016},
+  organization={Ieee}
+}
+
+@article{zhu2019anatomynet,
+  title={AnatomyNet: deep learning for fast and fully automated whole-volume segmentation of head and neck anatomy},
+  author={Zhu, Wentao and Huang, Yufang and Zeng, Liang and Chen, Xuming and Liu, Yong and Qian, Zhen and Du, Nan and Fan, Wei and Xie, Xiaohui},
+  journal={Medical physics},
+  volume={46},
+  number={2},
+  pages={576--589},
+  year={2019},
+  publisher={Wiley Online Library}
+}
+
+@ARTICLE{9109297,
+  author={Wang, Guotai and Liu, Xinglong and Li, Chaoping and Xu, Zhiyong and Ruan, Jiugen and Zhu, Haifeng and Meng, Tao and Li, Kang and Huang, Ning and Zhang, Shaoting},
+  journal={IEEE Transactions on Medical Imaging}, 
+  title={A Noise-Robust Framework for Automatic Segmentation of COVID-19 Pneumonia Lesions From CT Images}, 
+  year={2020},
+  volume={39},
+  number={8},
+  pages={2653-2663},
+  keywords={Noise measurement;Image segmentation;Lesions;Lung;Training;COVID-19;COVID-19;convolutional neural network;noisy label;segmentation;pneumonia},
+  doi={10.1109/TMI.2020.3000314}
+}
+
+@article{ji2022video,
+  title={Video polyp segmentation: A deep learning perspective},
+  author={Ji, Ge-Peng and Xiao, Guobao and Chou, Yu-Cheng and Fan, Deng-Ping and Zhao, Kai and Chen, Geng and Van Gool, Luc},
+  journal={Machine Intelligence Research},
+  volume={19},
+  number={6},
+  pages={531--549},
+  year={2022},
+  publisher={Springer}
+}
+
+@article{maleki2020machine,
+  title={Machine learning applications for head and neck imaging},
+  author={Maleki, Farhad and Le, William Trung and Sananmuang, Thiparom and Kadoury, Samuel and Forghani, Reza},
+  journal={Neuroimaging Clinics},
+  volume={30},
+  number={4},
+  pages={517--529},
+  year={2020},
+  publisher={Elsevier}
+}

@@ -36,25 +36,32 @@
 \section{はじめに}
 セマンティックセグメンテーションは，画像中の全てのピクセルに対し
 物体のクラスのラベルを推定するタスクである．
-特に医用画像の分野においては心臓MRIなどに用いられており，
+特に医用画像の分野においてはポリープ\cite{ji2022video}や頭頸部がん（HNC）放射線治療における危険臓器\cite{maleki2020machine}などに用いられている．
 
 しかし，医用画像セグメンテーションでは，画像全体に対する関心領域が
 極小であるクラス不均衡という課題がある．
-
 この課題に対処するため，少数クラスを考慮した学習を行うことができる損失関数が考案されてきた．
+例えば分類タスクで広く使われているCross-Entropy Loss\cite{long2015fully}と比較して，
+Dice Index と呼ばれる類似度指標に基づいて定義されているDice Loss\cite{milletari2016v}は，
+少数クラスの誤差も全体の平均損失に大きく寄与するため，クラス不均衡下でも検出性能を向上させる効果がある．
+また、Dice Lossの多くの拡張手法も提案されており，CT画像\cite{zhu2019anatomynet, 9109297}や
+MRI画像\cite{KATO2024107695}において高い性能が報告されている．
 しかし，これらのアプローチでは検出難易度に関わらず誤差関数の形状が固定されており，
 画像によって最適な重みづけがされていないことが課題だった．
 
 そこで本研究では，検出難易度を画像毎に算出したものを学習に取り入れ，
 誤差関数の形状を動的に変化させる手法を提案する．
+具体的には，学習中に一定epoch毎に推論フェーズを挿入し，MC Dropout\cite{pmlr-v48-gal16}により
+各画像毎に複数枚の予測画像を得た後，ピクセル単位で不確実性を計算し，画像全体の不確実性を難易度指標として算出する．
+この難易度指標をPolyDice-1 Lossの学習に取り入れることで，画像毎に最適な誤差関数を実現する．
 
 本研究の最終的な目的は，画像毎のセグメンテーションの難易度指標を算出したものを学習に取り入れ，
-誤差関数の形状を動的に変化させることである．その実現に向けた最初のステップとして，
+誤差関数の形状を適応的に変化させることである．その実現に向けた最初のステップとして，
 本稿では難易度指標が学習が進むにつれてどのように推移するかを検証する．
 
 \section{提案法}
 図に提案法の概略図を示す．
-提案法は，まず学習中に一定epoch毎に推論フェーズを挿入し，MC Dropoutにより複数枚の予測画像を得た後，
+提案法は，まず学習中に一定epoch毎に推論フェーズを挿入し，MC Dropout により複数枚の予測画像を得た後，
 ピクセル単位で不確実性を計算し，画像全体の不確実性を難易度指標として算出する．
 
 \subsection{PolyDice-1 Lossの説明}
@@ -64,7 +71,7 @@ Dice Lossを拡張し多項式展開することを考える．
 $W \times H$（pixel）の画像に対し，
 予測画像を$\hat{\mathbf{y}} \in \mathbb R ^ {W \times H}$，
 その画像に対する正解画像を$\mathbf{y} \in \mathbb R ^ {W \times H}$とし，
-位置$i, j$における画素値をそれぞれ添字$i, j$を用いて$\hat{y}_{ij}, {y}_{ij}$と表現すると，Dice Lossは下記の式で示される．
+$\hat{\mathbf{y}}, \mathbf{y}$,の位置$i, j$における画素値をそれぞれ添字$i, j$を用いて$\hat{y}_{ij}, {y}_{ij}$と表現すると，Dice Lossは下記の式で示される．
 
 \begin{equation}
   \mathcal{L}_{\text{Dice}}(\hat{\mathbf{y}}, \mathbf{y}) = 1 - \frac{2 \sum_{i=1}^{W} \sum_{j=1}^{H} \hat{y}_{ij} y_{ij}}{\sum_{i=1}^{W} \sum_{j=1}^{H}(\hat{y_{ij}} ^ 2 + y_{ij} ^ 2)}
@@ -83,11 +90,11 @@ Dice Lossは次式のように表現することができる．
 
 この式において，$s = \frac{2 \langle \hat{\mathbf{y}} ^ {\prime}, {\mathbf{y}} ^ {\prime} \rangle}{\Vert \hat{\mathbf{y}} ^ {\prime} \Vert ^ 2 + \Vert {\mathbf{y}} ^ {\prime} \Vert ^ 2}$，
 $\theta = \frac{\langle \hat{\mathbf{y}} ^ {\prime}, {\mathbf{y}} ^ {\prime} \rangle}{\Vert \hat{\mathbf{y}} ^ {\prime} \Vert \Vert {\mathbf{y}} ^ {\prime} \Vert}$とおくと，
+$\mathcal{L}_{\text{Dice}} = 1 - s \cos{\theta}$となり，
 Dice Lossは2つの成分，すなわちベクトル間の角度$\theta$に基づく方向成分（コサイン類似度）と，
-ベクトルの大きさに基づくスケール成分$s$から構成されていることがわかる．
-両方のベクトルが単位ノルムである場合、スケール成分$s=1$となり，Dice Lossはコサイン類似度そのものと一致する．
-$\mathcal{L}_{\text{Dice}} = 1 - s \cos{\theta}$となる．
-ここで，$\theta$は予測ベクトルと正解ベクトルのなす角であり，予測と正解が大きく変わらない，
+ベクトルの大きさに基づくスケール成分$s$から構成されていることがわる．
+両方のベクトルが単位ノルムである場合、スケール成分$s=1$となり，Dice Lossはコサイン類似度そのものと一致する\cite{KATO2024107695}．
+ここで，$\theta$は予測ベクトルと正解ベクトルのなす角であり，予測と正解が大きく異ならない，
 つまり$\theta \approx 0$と仮定し，$\cos{\theta}$を$\theta = 0$まわりでテイラー展開すると以下のように近似できる．
 \begin{equation}
   \cos{\theta} = 1 - \frac{\theta ^ 2}{2!} + \frac{\theta ^ 4}{4!} - \cdots
@@ -118,102 +125,84 @@ Dice Lossを多項式展開したPolynomial Dice Lossは以下のように表現
 
 
 \subsubsection{PolyDice-1 Lossの導出}
-PolyLossのアプローチに倣い，多項式の次数に基づいてPolynomial Dice Lossのバリエーションを検討する．
+PolyLoss\cite{leng2022polyloss}のアプローチに倣い，多項式の次数に基づいてPolynomial Dice Lossのバリエーションを検討する．
 まず，テイラー展開で得られた無限級数を第$K$項までで打ち切ることで，以下のような損失関数を定義する：
 
 \begin{equation}
   \mathcal{L}_{\text{PolyDice-K}} = \mathcal{L}_{\text{PolyDice}} + s \sum_{k=1}^{K} \varepsilon_k \theta^{2k}
 \end{equation}
+
+Lengら\cite{leng2022polyloss}は，多項式展開の最初の$K$項に対してパラメータ$\epsilon_i(i = 1, \cdots, K)$を用い，
+高次の項を省略し，低次の項を強調する損失関数を提案した．
+具体的には次のように定義される：
+
+\begin{equation}
+  \mathcal{L}_{\text{PolyDice-K}} = (1 - s) + s \sum_{k=1}^{K} (\alpha_k + \varepsilon_k) \theta^{2k}
+\end{equation}
 %
 %
-しかし，これらのハイパーパラメータ$\varepsilon$を調整するのは難しく，
+しかし，これらのハイパーパラメータ$\epsilon_i$を調整するのは難しく，
 特に医用画像セグメンテーションでは交差検証による検証が用いられるため，このような複雑なチューニングは実用的ではない．
-Leng らは，第$1$項（$\theta ^ 2$）のみを調整するだけで十分な性能向上が得られることを示し，よりチューニングが容易なケース$K=1$の損失関数を提案している．
+Leng ら\cite{leng2022polyloss}は，第$1$項（$\theta ^ 2$）のみを調整するだけで十分な性能向上が得られることを示し，よりチューニングが容易なケース$K=1$の損失関数を提案している．
 これに従い，以下のようにPolyDice-1 Lossを定義する．
 
 \begin{equation}
   \mathcal{L}_{\text{PolyDice-1}} = (1 - s) + s(\alpha_1 + \epsilon_1) \theta^2
 \end{equation}
 
+\subsection{MC Dropoutによる複数回の推論}
+
+前節で導入したPolyDice-1 Lossを用いて学習を行う際に，
+一定epoch毎に推論フェーズを挿入し，MC Dropoutにより複数枚の予測画像を得る．
+MC Dropoutは，ニューラルネットワークの一部のユニットを確率$p$でランダムに不活化するDropout処理を
+学習時のみでなく推論時にも用いることで，予測を分布として計算する手法である．
+出力を落とすノードを$N$回変えることで，出力される値は$N$回分の推論結果の分布として得られ，
+この集合は近似的に予測事後分布の標本集合として解釈できる．
+提案法では，学習段階でM（epoch）毎に推論フェーズを挿入してDropout確率$p$でMC Dropoutを$N$回実行することで，
+各学習段階で$N$枚の複数の予測画像を得る．
+
+\section{セグメンテーションの難易度指標の算出}
+
+\subsection{ピクセル単位の不確実性の計算}
+前節で画像毎に得られたN枚の予測画像に対し，画素単位で不確実性を計算する．
+具体的には，各画素における予測値の分散を不確実性として採用する．
+予測値の分散を用いることで，各画素における予測のばらつきを評価できると考えられる．
+
+\subsection{画像全体の難易度指標の算出}
+前節で得られたピクセル単位の不確実性を用いて，画像全体の難易度指標を算出する．
+具体的には，画像全体の不確実性の○○を難易度指標として採用する．
+○○を用いることで，画像全体の××を評価できると考えられる．
+
 \newpage
 
-\section{図表について}
-\subsection{図の挿入}
-図の使用例を次に示します．
-\newline
+\section{実験}
+\subsection{実験条件}
+提案法の有効性を検証するために，医用画像セグメンテーションデータを用いて実験を行った．
+データセットはCVC-ClinicDB\cite{BERNAL201599}を用い，$5$-fold 交差検証に基づき訓練データと
+テストデータに分割された．なお，訓練データのうち$10 \%$をランダムに抽出し，検証データとした．
+各画像は$W = 224$ pixel, $H = 224$ pixelでリサイズを行い，
+過学習抑制のため，訓練データに対する空間的データ拡張として
+$50\%$の確率で上下左右反転及び画像の明るさ・コントラストの変更を施した．
 
-Dice Lossは予測画像と正解画像との類似度を測るDice Indexに基づいて定義される．
-$W \times H$（pixel）のモデルの予測画像を$\hat{\mathbf{y}} \in \mathbb R ^ {W \times H}$，
-その画像に対する正解画像を$\mathbf{y} \in \mathbb R ^ {W \times H}$とすると，
-Dice Lossは下記の式で示される．
+セグメンテーションモデルはU-Net\cite{ronneberger2015u}を用い，
+学習には，バッチサイズ$32$, 学習率$10 ^ {−3}$ のAdaptive moment
+estimation（以下, Adam）\cite{kingma2014adam}を用いた．
+最大エポック数は$200$に設定し，検証データに対する損失が最小のエポックにおける
+モデルインスタンスを，最終的なテストデータの評価に用いた．
 
-\begin{equation}
-  \mathcal{L}_{\text{Dice}}(\hat{\mathbf{y}}, \mathbf{y}) = 1 - \frac{2 \sum_{i=1}^{W} \sum_{j=1}^{H} \hat{y}_{ij} y_{ij}}{\sum_{i=1}^{W} \sum_{j=1}^{H} (aa \hat{y_{ij}} ^ 2 + y_{ij} ^ 2)}
-\end{equation}
+また，提案法におけるMC Dropoutのパラメータとして，
+Dropoutを行う確率$p = 0.5$，推論回数$N = 10$，推論フェーズの挿入間隔$M = 10$とした．
 
+\subsection{結果と考察}
+未定
 
-東広島キャンパスでは，図\ref{fig:campus}に示すように，
-初夏にはアメリカ楓の美しい並木が緑に輝く．
-%
-\begin{figure}[t]
-	\begin{center}
-		\includegraphics[width=0.95\hsize]{figure/campus.jpg}
-	\end{center}
-	\vspace{-12pt} %図とキャプションとの間隔調整
-	\caption{東広島キャンパスのアメリカ楓並木}
-	\label{fig:campus}
-\end{figure}
-%
-\newline
-
-Minkowski Islandは4つのMinkowski Sausage (Quadratic type 2 curve) を
-正方形状に配置したフラクタル図形である（図\ref{fig:fractal}参照）．
-%
-\begin{figure}[b]
-	\begin{center}
-		\includegraphics[scale=1]{figure/fractal.pdf}
-	\end{center}
-	\vspace{-12pt} %図とキャプションとの間隔調整
-	\caption{Minkowski Island}
-	\label{fig:fractal}
-\end{figure}
-%
-\newpage
-
-\subsection{表の作成}
-表の記入例を次に示します．
-
-コースティックフォトンマップには，光源から放出されたフォトンが拡散反射面に到達する前に，
-1回以上鏡面反射あるいは透過したフォトンの情報が格納される．
-すなわち，表\ref{tab:path_notation}に示す表記法を用いれば，
-{\tt LS+D}の経路をたどったフォトンの位置，放射束，入射方向が記録される．
-%
-\begin{table}[t]
-  \begin{center}
-  \caption{光の経路の表記法}
-  \label{tab:path_notation}
-  \begin{tabular}{l l | l l} \toprule
-    {\tt L} & 光源 & {\tt (k)+} & {\tt k}が1回かそれ以上起きる \\ 
-    {\tt E} & 視点 & {\tt (k)*} & {\tt k}が0回かそれ以上起きる \\
-    {\tt S} & 鏡面反射 & {\tt (k)?} & {\tt k}が0回か1回起きる \\ 
-    {\tt D} & 拡散反射 & {\tt (k|k')} & {\tt k}あるいは{\tt k'}が起きる \\ \bottomrule
-  \end{tabular}
-  \end{center}
-\end{table}
-%
-\newline
-
-\section{文献引用}
-文献引用の例を次に示します．
-\newline
-
-レンダリング方程式（rendering equation）~\cite{kajiya1986rendering}は，算出すべき放射輝度$L$が式の両辺に表れた積分方程式となっている．
-
-フォトンマッピング法~\cite{jensen2001realistic}では2段階のレイトレーシングを行うことによりレンダリング方程式を解く．
-
-
-\section{まとめ}
-修士論文中間発表予稿の様式を示しました．
+\section{まとめと今後の課題}
+本稿では，医用画像セグメンテーションにおけるクラス不均衡の課題に対処するため，
+検出難易度を画像毎に算出したものを学習に取り入れ，誤差関数の形状を動的に変化させる手法を提案した．
+提案法では，学習中に一定epoch毎に推論フェーズを挿入し，MC Dropoutにより複数枚の予測画像を得た後，
+ピクセル単位で不確実性を計算し，画像全体の不確実性を難易度指標として算出した．
+医用画像セグメンテーションデータを用いた実験の結果，○○が明らかになった．
+今後は××および学習に不確実性を取り入れることで，動的な損失関数を実現し，提案法の有効性を検証する予定である．
 
 %%%%% 参考文献（BibTeXを使う場合） %%%%%
 \bibliographystyle{bibstyle} % bstファイルを設定
