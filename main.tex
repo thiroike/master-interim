@@ -61,10 +61,16 @@ MRI画像\cite{KATO2024107695}において高い性能が報告されている�
 画像難易度の定量化手法としての妥当性を評価する．
 \section{提案法}
 
+\begin{figure}
+  \includegraphics[width=\columnwidth]{figure/method.pdf}
+  \caption{Overview of the proposed method}
+  \label{method}
+\end{figure}
+
 \subsection{概要}
 本研究の最終目標は，画像ごとのセグメンテーション難易度を学習中に動的に評価し，
 その難易度に応じて損失関数の形状を適応的に変化させるシステムの構築である．
-図に提案法の全体構成を示す．
+図\ref{method}に提案法の全体構成を示す．
 提案法では，学習中各画像に対してMC Dropoutを用いて画像毎に複数枚推論を行い，予測のばらつきから不確実性を定量化する．
 この不確実性情報は，モデルがその画像のセグメンテーションをどの程度「難しい」と感じているかを反映する．
 将来的には，この不確実性情報を画像単位に集約し，PolyDice Lossの形状を動的に制御することで，
