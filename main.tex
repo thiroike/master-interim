@@ -57,212 +57,225 @@ MRI画像\cite{KATO2024107695}において高い性能が報告されている�
 各画像毎に複数枚の予測画像を得た後，ピクセル単位で不確実性指標を計算し，そこから画像全体の不確実性指標を集約したものを難易度指標として算出する．
 この難易度指標をPolyDice-1 Lossの学習に取り入れることで，検出難易度を考慮した頑健な検出を実現することができる．
 
-本研究の最終的な目的は，画像毎のセグメンテーションの難易度指標を学習に取り入れ，
-誤差関数の形状を適応的に変化させることである．その実現に向けた最初のステップとして，
-本稿ではピクセル単位の不確実性指標が学習が進むにつれてどのように推移するかを検証する．
-
 \section{提案法}
-図に提案法の概略図を示す．
-提案法では，学習中に$M$（epoch）毎にMC Dropoutを用いて画像毎に$N$枚の推論を行うことで，各画像の不確実性を算出する．
-この不確実性を難易度指標として扱ったものを，PolyDice-1 Lossの係数の動的な調整に利用することで，頑健な検出を実現する．
-テスト時には，この適応的学習によって得られた最終的なモデルを用いて単一の予測を行う．
 
-\subsection{PolyDice-1 Lossの説明}
+\subsection{概要}
+本研究の最終目標は，画像ごとのセグメンテーション難易度を学習中に動的に評価し，
+その難易度に応じて損失関数の形状を適応的に変化させるシステムの構築である．
+図に提案法の全体構成を示す．
+提案法では，学習中各画像に対してMC Dropoutを用いて画像毎に複数枚推論を行い，予測のばらつきから不確実性を定量化する．
+この不確実性情報は，モデルがその画像のセグメンテーションをどの程度「難しい」と感じているかを反映する．
+将来的には，この不確実性情報を画像単位に集約し，PolyDice-1 Lossのハイパーパラメータ$\epsilon$を動的に制御することで，
+難しい画像には急峻な勾配を，簡単な画像には緩やかな勾配を与える適応的学習を実現する．
 
-\subsubsection{Polynomial Dice Lossの導出}
-Dice Lossを拡張し多項式展開することを考える．
-$W \times H$（pixel）の画像に対し，
-予測画像を$\hat{\mathbf{y}} \in \mathbb R ^ {W \times H}$，
-その画像に対する正解画像を$\mathbf{y} \in \mathbb R ^ {W \times H}$とし，
-$\hat{\mathbf{y}}, \mathbf{y}$,の位置$i, j$における画素値をそれぞれ添字$i, j$を用いて$\hat{y}_{ij}, {y}_{ij}$と表現すると，Dice Lossは下記の式で示される．
+本稿では，最終目標に向けた基礎的検証として，ピクセル単位の不確実性指標が学習過程でどのように推移するかを分析し，
+画像難易度の指標としての妥当性を検証する．
+
+\subsection{PolyDice Lossによる損失形状制御}
+
+\subsubsection{Dice Lossの定式化}
+画像サイズを $H \times W$とし，ピクセル位置を $(i, j)$ で表す（$i \in \{1, ..., H\}, j \in \{1, ..., W\}$）．
+セグメンテーションタスクにおいて，モデルの予測確率マップを$\hat{\mathbf{y}} \in \mathbb R ^ {H \times W}$，
+その画像に対する正解マスクを$\mathbf{y} \in \mathbb R ^ {H \times W}$とすると，Dice Lossは次式で定義される．
 
 \begin{equation}
   \mathcal{L}_{\text{Dice}}(\hat{\mathbf{y}}, \mathbf{y}) = 1 - \frac{2 \sum_{i=1}^{W} \sum_{j=1}^{H} \hat{y}_{ij} y_{ij}}{\sum_{i=1}^{W} \sum_{j=1}^{H}(\hat{y_{ij}} ^ 2 + y_{ij} ^ 2)}
 \end{equation}
 
-ここで予測画像$\hat{\mathbf{y}}$と正解画像$\mathbf{y}$をそれぞれ一次元のベクトル$\hat{\mathbf{y}} ^ {\prime}, {\mathbf{y}} ^ {\prime}$
-に平坦化し，L2ノルム$\Vert \cdot \Vert$と内積$\langle \cdot, \cdot \rangle $を用いて
-Dice Lossは次式のように表現することができる．
-\begin{equation}
-  \begin{aligned}
-    \mathcal{L}_{\text{Dice}} &= 1 - \frac{2 \langle \hat{\mathbf{y}} ^ {\prime}, {\mathbf{y}} ^ {\prime} \rangle}{\Vert \hat{\mathbf{y}} ^ {\prime} \Vert ^ 2 + \Vert {\mathbf{y}} ^ {\prime} \Vert ^ 2} \\
-    &= 1 - \frac{2 \Vert \hat{\mathbf{y}} ^ {\prime} \Vert \Vert {\mathbf{y}} ^ {\prime} \Vert}{\Vert \hat{\mathbf{y}} ^ {\prime} \Vert ^ 2 + \Vert {\mathbf{y}} ^ {\prime} \Vert ^ 2}
-    \times \frac{\langle \hat{\mathbf{y}} ^ {\prime}, {\mathbf{y}} ^ {\prime} \rangle}{\Vert \hat{\mathbf{y}} ^ {\prime} \Vert \Vert {\mathbf{y}} ^ {\prime} \Vert}
-  \end{aligned}
-\end{equation}
+\subsubsection{幾何学的解釈と多項式展開}
 
-この式において，$s = \frac{2 \langle \hat{\mathbf{y}} ^ {\prime}, {\mathbf{y}} ^ {\prime} \rangle}{\Vert \hat{\mathbf{y}} ^ {\prime} \Vert ^ 2 + \Vert {\mathbf{y}} ^ {\prime} \Vert ^ 2}$，
-$\theta = \frac{\langle \hat{\mathbf{y}} ^ {\prime}, {\mathbf{y}} ^ {\prime} \rangle}{\Vert \hat{\mathbf{y}} ^ {\prime} \Vert \Vert {\mathbf{y}} ^ {\prime} \Vert}$とおくと，
-$\mathcal{L}_{\text{Dice}} = 1 - s \cos{\theta}$となり，
-Dice Lossは2つの成分，すなわちベクトル間の角度$\theta$に基づく方向成分（コサイン類似度）と，
-ベクトルの大きさに基づくスケール成分$s$から構成されていることがわる．
-両方のベクトルが単位ノルムである場合、スケール成分$s=1$となり，Dice Lossはコサイン類似度そのものと一致する\cite{KATO2024107695}．
-ここで，$\theta$は予測ベクトルと正解ベクトルのなす角であり，予測と正解が大きく異ならない，
-つまり$\theta \approx 0$と仮定し，$\cos{\theta}$を$\theta = 0$まわりでテイラー展開すると以下のように近似できる．
+予測確率マップ$\hat{\mathbf{y}}$と正解マスク$\mathbf{y}$をそれぞれ長さ$HW$のベクトル$\hat{\mathbf{y}} ^ {\prime}, {\mathbf{y}} ^ {\prime}$
+として平坦化すると，Dice Lossは以下のように分解できる．
+
+\begin{equation}
+  \mathcal{L}_{\text{Dice}} = 1 - s \cos  \theta
+\end{equation}
+% \begin{equation}
+%   \begin{aligned}
+%     \mathcal{L}_{\text{Dice}} &= 1 - \frac{2 \langle \hat{\mathbf{y}} ^ {\prime}, {\mathbf{y}} ^ {\prime} \rangle}{\Vert \hat{\mathbf{y}} ^ {\prime} \Vert ^ 2 + \Vert {\mathbf{y}} ^ {\prime} \Vert ^ 2} \\
+%     &= 1 - \frac{2 \Vert \hat{\mathbf{y}} ^ {\prime} \Vert \Vert {\mathbf{y}} ^ {\prime} \Vert}{\Vert \hat{\mathbf{y}} ^ {\prime} \Vert ^ 2 + \Vert {\mathbf{y}} ^ {\prime} \Vert ^ 2}
+%     \times \frac{\langle \hat{\mathbf{y}} ^ {\prime}, {\mathbf{y}} ^ {\prime} \rangle}{\Vert \hat{\mathbf{y}} ^ {\prime} \Vert \Vert {\mathbf{y}} ^ {\prime} \Vert}
+%   \end{aligned}
+% \end{equation}
+ここで，$s = \frac{2 \langle \hat{\mathbf{y}} ^ {\prime}, {\mathbf{y}} ^ {\prime} \rangle}{\Vert \hat{\mathbf{y}} ^ {\prime} \Vert ^ 2 + \Vert {\mathbf{y}} ^ {\prime} \Vert ^ 2}$はスケール成分，
+$\theta = \frac{\langle \hat{\mathbf{y}} ^ {\prime}, {\mathbf{y}} ^ {\prime} \rangle}{\Vert \hat{\mathbf{y}} ^ {\prime} \Vert \Vert {\mathbf{y}} ^ {\prime} \Vert}$は2つの
+ベクトル間の角度を表す．この分解により，Dice Lossはスケール成分$s$と$\cos \theta$の積として理解できる．
+
+方向成分$\cos \theta$に対してTaylor展開を適用することで，PolyDice Lossの多項式表現を導出する．
+つまり$\theta \approx 0$（予測と正解が大きく異ならない）と仮定し，$\cos{\theta}$を$\theta = 0$まわりでテイラー展開すると以下のように近似できる．
 \begin{equation}
   \cos{\theta} = 1 - \frac{\theta ^ 2}{2!} + \frac{\theta ^ 4}{4!} - \cdots
 \end{equation}
-
-スケール成分$s$を一定と仮定し，この近似式をDice Lossに代入して整理すると，以下のようになる．
-
-\begin{equation}
-  \begin{aligned}
-  \mathcal{L}_{\text{Dice}} &= 1 - s \left(1 + \frac{1}{2!} \theta ^ 2 - \frac{1}{4!} \theta ^ 4 + \cdots\right) \\
-  &= (1 - s) + s \left[\sum_{k = 1}^{\infty} \frac{(-1) ^ {k - 1}}{(2k)!} \theta ^ {2k}\right]
-\end{aligned}
-\end{equation}
-
-ここで，各テイラー項の係数$\alpha_k$を$\alpha_k = \frac{(-1)^{k-1}}{(2k)!}$とすると，
-Dice Lossを多項式展開したPolynomial Dice Lossは以下のように表現できる．
-
+これをDice Lossに代入し，整理するとPolyDiceの一般形が得られる：
+% \begin{equation}
+%   \begin{aligned}
+%   \mathcal{L}_{\text{Dice}} &= 1 - s \left(1 + \frac{1}{2!} \theta ^ 2 - \frac{1}{4!} \theta ^ 4 + \cdots\right) \\
+%   &= (1 - s) + s \left[\sum_{k = 1}^{\infty} \frac{(-1) ^ {k - 1}}{(2k)!} \theta ^ {2k}\right]
+% \end{aligned}
+% \end{equation}
 \begin{equation}
   \mathcal{L}_{\text{PolyDice}} = (1 - s) + s \sum_{k = 1}^{\infty} \alpha_k \theta ^ {2k}
 \end{equation}
+ここで， $\alpha_k=\frac{(-1)^{k-1}}{(2k)!}$は各Taylor項の符号係数である．
 
-この損失関数を計算するために、角度$\theta$は以下のようにコサインの逆関数を用いて算出される．
+% この損失関数を計算するために、角度$\theta$は以下のようにコサインの逆関数を用いて算出される．
+% \begin{equation}
+%   \theta = \arccos{\left(\frac{\langle \hat{\mathbf{y}} ^ {\prime}, {\mathbf{y}} ^ {\prime} \rangle}{\Vert \hat{\mathbf{y}} ^ {\prime} \Vert \Vert {\mathbf{y}} ^ {\prime} \Vert}\right)}
+% \end{equation}
+
+\subsubsection{PolyDice-1 Loss}
+実用的な観点から，\cite{leng2022polyloss}のアプローチに従い，第$1$項のみを調整可能とするPolyDice-1 Lossを採用する：
 \begin{equation}
-  \theta = \arccos{\left(\frac{\langle \hat{\mathbf{y}} ^ {\prime}, {\mathbf{y}} ^ {\prime} \rangle}{\Vert \hat{\mathbf{y}} ^ {\prime} \Vert \Vert {\mathbf{y}} ^ {\prime} \Vert}\right)}
+  \mathcal{L}_{\text{PolyDice-1}} = (1 - s) + s \left(\frac{1}{2} + \epsilon\right) \theta^2
 \end{equation}
+ここで，$\epsilon \in \mathbb{R}$は損失関数の形状を制御する唯一のハイパーパラメータである．
+図\ref{polydice}に$s = 0.1$としてPolyDice-1 Lossの$\epsilon$を変化させた際の値の推移を示す．
+$\epsilon > 0$では予測誤差に対するペナルティが強化され，$\epsilon < 0$では緩和される．
+本稿では，まず$\epsilon = 0$で固定して実験を行い，将来的にはこの$\epsilon$を不確実性に基づいて動的に調整する．
 
-このようにして，Dice Lossを幾何学的に解釈したうえでテイラー展開を用いることでPolynomial Dice Lossが導かれる．
+\begin{figure}
+  \includegraphics[scale=0.25]{figure/loss.pdf}
+  \caption{Plot of PolyDice-1 Loss（$s = 0.1$）}
+  \label{polydice}
+\end{figure}
 
+\subsection{MC Dropoutによる不確実性推定}
 
-\subsubsection{PolyDice-1 Lossの導出}
-PolyLoss\cite{leng2022polyloss}のアプローチに倣い，多項式の次数に基づいてPolynomial Dice Lossのバリエーションを検討する．
-まず，テイラー展開で得られた無限級数を第$K$項までで打ち切ることで，以下のような損失関数を定義する：
+\subsubsection{MC Dropoutの理論的背景}
 
-\begin{equation}
-  \mathcal{L}_{\text{PolyDice-K}} = \mathcal{L}_{\text{PolyDice}} + s \sum_{k=1}^{K} \varepsilon_k \theta^{2k}
-\end{equation}
+Dropoutは，ニューラルネットワークの学習時に，一部のユニットを確率$p$でランダムに不活性化することで
+過学習を抑制し，モデルの汎化性能を向上させる手法である．
 
-Lengら\cite{leng2022polyloss}は，多項式展開の最初の$K$項に対してパラメータ$\epsilon_i(i = 1, \cdots, K)$を用い，
-高次の項を省略し，低次の項を強調する損失関数を提案した．
-具体的には次のように定義される：
-
-\begin{equation}
-  \mathcal{L}_{\text{PolyDice-K}} = (1 - s) + s \sum_{k=1}^{K} (\alpha_k + \varepsilon_k) \theta^{2k}
-\end{equation}
-%
-%
-しかし，これらのハイパーパラメータ$\epsilon_i$を調整するのは難しく，
-特に医用画像セグメンテーションでは交差検証による検証が用いられるため，このような複雑なチューニングは実用的ではない．
-Leng ら\cite{leng2022polyloss}は，第$1$項（$\theta ^ 2$）のみを調整するだけで十分な性能向上が得られることを示し，よりチューニングが容易なケース$K=1$の損失関数を提案している．
-これに従い，以下のようにPolyDice-1 Lossを定義する．
-
-\begin{equation}
-  \mathcal{L}_{\text{PolyDice-1}} = (1 - s) + s(\alpha_1 + \epsilon_1) \theta^2
-\end{equation}
-
-\subsection{MC Dropoutによる複数回の推論}
-
-前節で導入したPolyDice-1 Lossを用いて学習を行う際に，
-一定epoch毎に推論フェーズを挿入し，MC Dropoutにより複数枚の予測画像を得る．
-MC Dropoutは，ニューラルネットワークの一部のユニットを確率$p$でランダムに不活化するDropout処理を
-学習時のみでなく推論時にも用いることで，予測を分布として計算する手法である．
-出力を落とすノードを$N$回変えることで，出力される値は$N$回分の推論結果の分布として得られ，
-この集合は近似的に予測事後分布の標本集合として解釈できる．
+MC Dropoutは．学習時のみだけでなく．推論時にもDropoutを用いることで不確実性を推定する手法である．
+通常，推論時の出力は決定論的であるが，Dropoutを有効にすることで，
+異なるサブネットワークが形成され、確率的な出力が得られる．
+同一入力に対してこの確率的な推論を複数回実行して得られる予測結果の分布は、
+Bayesian Neural Networkにおける予測事後分布近似とみなせ，変分推論の一種として解釈できる．
 提案法では，学習段階でM（epoch）毎に推論フェーズを挿入してDropoutを確率$p$でMC Dropoutを$N$回実行することで，
 各学習段階で$N$枚の複数の予測画像を得る．
-またDropout層はモデルの最も深いエンコーダおよびデコーダに配置した．
-浅い層と比較してより高次な特徴を抽出する深い層にDropoutを配置することで，
+またDropout層はモデルの最も深いエンコーダおよびデコーダに配置する．
+浅い層と比較してより高次な特徴を抽出する深い層でDropoutを実行することで，
 高次な意味的判断におけるモデルの確信度がより直接的に反映されることが期待される．
 
-\section{セグメンテーションの難易度指標の算出}
+\subsubsection{MC Dropoutの定式化}
+学習済みモデル$f_{\theta}: \mathcal{X} \rightarrow [0,1]^{H \times W}$に対し，Dropout率$p \in (0,1)$でMC Dropoutを適用する．
+同一入力画像$x \in \mathcal{X}$に対してN回の確率的推論を行い，予測集合$\{\hat{Y}^{(n)}\}_{n=1}^{N}$を得る：
+%
+\begin{equation}
+  \hat{Y}^{(n)} = f_{\theta}(x; \mathbf{z}^{(n)}), \quad \mathbf{z}^{(n)} \sim \text{Bernoulli}(1-p)
+\end{equation}
+%
+ここで，$\mathbf{z}^{(n)}$は$n$回目の推論におけるDropoutマスク（各ニューロンの活性/非活性を決定）である．
+各$\hat{Y}^{(n)} = \{\hat{y}_{i,j}^{(n)} \in [0,1]\}_{i,j}$は$n$回目の推論における予測確率マップである．
 
-\subsection{ピクセル単位の不確実性指標の計算}
-前節で画像毎に得られた$N$枚の予測画像に対し，ピクセル単位で不確実性指標を計算する．
-不確実性指標として，以下の3つを検討する．
+\subsubsection{ピクセル単位の不確実性指標の計算}
+得られた$N$枚の予測画像に対し，ピクセル単位で不確実性指標を計算する．
+不確実性マップから，以下の3つの不確実指標をピクセル単位で計算する．
 
 \begin{itemize}
-  \item （a）予測分散：確率予測値の統計的なばらつきを測る指標であり，以下の式で表される．
+  \item \textbf{予測分散}：
   \begin{equation}
-    \text{Var}(\hat{y}_{ij}) = \frac{1}{N} \sum_{n=1}^{N} (\hat{y}_{ij}^{(n)} - \mu_{ij})^2
+    \text{Var}(\hat{y}_{ij}) = \frac{1}{N} \sum_{n=1}^{N} (\hat{y}_{ij}^{(n)} - \bar{y}_{i,j})^2
   \end{equation}
-  ここで，$\hat{y}_{ij}^{(k)}$は$k$回目のMC Dropoutの推論における画素$(i, j)$の予測値であり，
-  $\hat{\mu}_{ij} = \dfrac{1}{N} \sum_{k = 1}^{N} \hat{y}_{ij} ^ {(k)}$は$\{\hat{y}_{ij} ^ {(k)}\}_{i = 1} ^ {N}$の平均値である．
-  予測分散は個々の予測値の平均からの散らばり具合を示し，予測が不安定であるほど大きな値をとる．
-  \item （b）予測エントロピー：$N$回の予測を平均した後の最終的な予測値の不確実性を測る指標であり，以下の式で表される．
+  ここで，$\bar{y}_{i,j} = \frac{1}{N} \sum_{k = 1}^{N} \hat{y}_{ij} ^ {(n)}$は予測の平均である．
+  この指標は，複数回の予測がどの程度ばらついているかを表し，値が大きいほどモデルの予測が不安定であることを示す．
+  \item \textbf{予測エントロピー}：
   \begin{equation}
-    H(\hat{y}_{ij}) = - \mu_{ij} \log{\mu_{ij}} - (1 - \mu_{ij}) \log{(1 - \mu_{ij})}
+    H(\bar{y}_{i,j}) = - \mu_{ij} \log{\bar{y}_{i,j}} - (1 - \bar{y}_{i,j}) \log{(1 - \bar{y}_{i,j})}
   \end{equation}
-  この値はデータに起因する不確実性とモデルの知識不足に起因する不確実性の両方が含まれ，
-  値が高いほど最終的な予測が曖昧である状態を意味する．
-  \item （c）相互情報量：予測エントロピーから期待エントロピーを差し引いたものであり，以下の式で表される．
+  これは平均予測の不確実性を表す．エントロピーは予測確率が$0.5$に近いほど高くなり，
+  モデルが前景・背景の判断に迷っていることを示す．確率が$0$または$1$に近い場合は低い値となる．
+  \item \textbf{相互情報量}：
   \begin{equation}
-    I(\hat{y}_{ij}) = H(\bar{\hat{y}}_{ij}) - \frac{1}{N}\sum_{k=1}^{N} H(\hat{y}_{ij}^{(k)})
+    I(\hat{y}_{ij}) = H(\bar{\hat{y}}_{ij}) - \frac{1}{N}\sum_{n=1}^{N} H(\hat{y}_{ij}^{(n)})
   \end{equation}
-  この値は予測エントロピーから予測分散を差し引いたもので，モデルの知識不足に起因する不確実を示す指標，
-  すなわち，MC Dropoutによる各推論結果の一貫性を示す．
+  これはモデルパラメータの不確実性（認識的不確実性）を表す．
+  全体の不確実性から偶然的不確実性を引いたもので，より多くのデータで学習することで減少する性質を持つ．
+  この値が高い領域は，モデルが十分に学習できていない可能性を示唆する．
 \end{itemize}
 
-上記の指標を分析することで，予測の不安定さやデータおよびモデルの不確実性を評価できる．
+\subsection{画像全体の難易度への集約と適応的制御（将来構想）}
 
-\subsection{画像全体の難易度指標の算出}
-前節で得られたピクセル単位の不確実性を用いて，画像全体の難易度指標を算出する．
-具体的には，画像全体の不確実性の○○を難易度指標として採用する．
-○○を用いることで，画像全体の××を評価できると考えられる．
+\subsubsection{画像単位への集約}
+ピクセル単位の不確実性マップ$U = \{u_{i,j}\}_{i,j}$から画像全体の難易度スコア$D \in \mathbb{R}^+$を算出する必要がある．
+セグメンテーションタスクの特性を考慮すると，境界領域の不確実性に着目する方法や，予測誤差と相関の高い領域を重視する方法などが考えられる．
+また，不確実性の空間的分布パターンや，前景・背景それぞれの不確実性の違いも重要な情報となる可能性がある．
+
+\subsubsection{適応的パラメータ制御}
+画像難易度スコア$D$に基づいて，Poly Dice Lossのパラメータ$\epsilon$を動的に制御する：
+
+\begin{equation}
+  \epsilon = g(D; \theta_g)
+\end{equation}
+ここで，$g$は制御関数，$\theta_g$はその学習可能なパラメータである．
+難易度が高い画像には大きな$\epsilon$を割り当てて急峻な勾配を与え，
+簡単な画像には小さな$\epsilon$で緩やかな勾配を与えることで，効率的な学習を実現する．
+
 
 \newpage
 
 \section{実験}
-\subsection{実験条件}
-提案法の有効性を検証するために，医用画像セグメンテーションデータを用いて実験を行った．
-データセットは大腸ポリープのCVC-ClinicDB\cite{BERNAL201599}を用い，$5$-fold 交差検証に基づき訓練データと
-テストデータに分割された．なお，訓練データのうち$10 \%$をランダムに抽出し，検証データとした．
-各画像は$W = 224$ pixel, $H = 224$ pixelでリサイズを行い，
-過学習抑制のため，訓練データに対する空間的データ拡張として
-$50\%$の確率で上下左右反転及び画像の明るさ・コントラストの変更を施した．
+\subsection{実験設定}
+\subsubsection{データセット}
+画像難易度の指標としての妥当性を検証するために，医用画像セグメンテーションデータを用いて実験を行った．
+データセットは，$384 \times 288$ pixelの$612$枚の大腸内視鏡画像とポリープマスクが含まれるCVC-ClinicDB\cite{BERNAL201599}を用い，
+訓練データとテストデータの割合は$8:2$とし，訓練データのうち$10 \%$をランダムに抽出し，検証データとした．
 
+\subsubsection{実装の詳細}
 セグメンテーションモデルは$3$層のU-Net\cite{ronneberger2015u}を用い，
 学習には，バッチサイズ$32$, 学習率$10 ^ {-3}$ のAdaptive moment
 estimation（以下, Adam）\cite{kingma2014adam}を用いた．
+損失関数はPolyDice-1 Lossにおいて$\epsilon = 0$としたものを用いた．
+各画像は$W = 224$ pixel, $H = 224$ pixelでリサイズを行い，
+過学習抑制のため，訓練データに対する空間的データ拡張として
+$50\%$の確率で上下左右反転及び画像の明るさ・コントラストの変更を施した．
 最大エポック数は$200$に設定し，検証データに対する損失が最小のエポックにおける
 モデルインスタンスを，最終的なテストデータの評価に用いた．
-
 また，提案法におけるMC Dropoutのパラメータとして，
 Dropoutを行う確率$p = 0.5$，推論回数$N = 10$，推論フェーズの挿入間隔$M = 10$とした．
 
 \subsection{結果と考察}
+
+\subsubsection{学習過程における不確実性の推移}
 学習初期に高い精度で予測できるようになった症例（以下症例$1$）と，学習後期においても精度が低い症例（以下症例$2$）について，
 $50, 100, 150, 200$ epochのピクセル単位の不確実性指標の推移を示す．
 (a)は予測平均，（b）は予測分散，（c）は予測エントロピー，（d）は相互情報量である．
-なお各不確実性指標において，画像を表示する際の最大値および最小値は，2つの症例間から算出した．
+なお各不確実性指標において，カラースケールは両症例間で統一し，全ピクセル・全エポックにおける最大値で正規化した．
 
 図\ref{fold5_file144}に症例$1$の不確実性指標の推移を示す．
 図\ref{fold5_file144}（b），（d）から，学習の進行に伴いポリープ内外で減少していることがわかる．
-これはポリープ内外において，モデルが学習の初期に予測の安定性と内部的な一貫性を獲得し，
-モデル自身の不確実性が解決された状態を示している．
 一方，両指標ともにポリープの境界部分では，学習後期においても微小な不確実性が残存している．
-これはモデル自身の不確かさが解消された後も残る不確実性，すなわちデータ自体が持つ本質的な曖昧さを反映していると考えられる．
 
 図\ref{fold2_file450}に症例2の不確実性指標の推移を示す．
 図\ref{fold2_file450}（b），（d）から，症例$1$と異なり，学習の進行に伴い，
 ポリープの輪郭および内部において不確実性が増大していることがわかる．
-これは症例$1$とは対照的に，モデルの内部的な予測確率の違いが最後まで解消されず，予測が数値的にも安定していないことを示している．
-症例$2$のポリープは，他の組織の特徴と類似しているため，
-モデルが学習データから一貫した判断基準を確立できなかったことが原因で最後まで精度が低かったと考えられる．
-すなわち，学習に伴い不確実性が増大しているのは，モデル自身の知識不足を反映していると考えられる．
 
-上記のピクセル単位の不確実性指標として，
-不確実性指標は境界領域に集中する傾向が見られたため，集約方法として，
-画像全体の平均値ではなく，境界領域に限定して集約した指標を用いることで，
-よりセグメンテーション性能に直結した難易度指標を定義することができると考えられる．
-また症例2において，学習の進行に伴い不確実性が増大したことから
-学習の後半で難易度指標が増大している症例に関しては，$\epsilon_1$の値を増加させ，
-誤った予測を行った画像の組織の特徴を重点的に学習させるような損失関数を設計することで
-頑健な検出を行うことができると考えられる．
+今回の検証から，各不確実性指標が捉える「難しさ」の側面が明らかになった．
+学習に伴い，相互情報量は症例1では減少し，症例2では増大したことから，
+これらはモデルの知識不足に起因するエピステミック不確実性を主に捉える指標と言える．
+一方，予測エントロピーは，学習が十分に進んで病変の特徴を捉えた後でも，画像の境界領域で高い値を示した．
+これは，「データ固有の曖昧さ」に起因するアレアトリック不確実性を捉える指標と言える．
 
+検証の結果，学習の進行に伴い，高精度な症例では相互情報量が収束したのに対し，
+精度が低い症例では学習後期でも高い相互情報量が残存することが確認された．
+本研究の目的は，損失関数を動的に制御して精度を向上させることにあるため，改善の余地がある「モデルの知識不足」を特定することが重要となる．
+したがって，モデルが「迷っている」状態を最も直接的に示す相互情報量が，本研究における難易度指標として妥当であると考えられる．
+検証の結果から，集約された難易度指標の値が高く難しい画像にはPolyDice-1 Lossの係数$\epsilon$を増加させ，
+急峻な勾配を課す適応的な学習を行うことで，特徴を重点的に学習させることができると考えられる．
+本稿の分析で，困難な症例では不確実性がポリープの内部に広範囲に分布する傾向が確認された．
+この情報をより効果的に活用するため，病変の正解マスクに着目して相互情報量を集約することで，
+難しい症例に対して頑健な検出ができる指標の設計を目指す．
 
 \section{まとめと今後の課題}
 本稿では，医用画像セグメンテーションの誤差関数において，検出難易度が高い画像に対する学習が不十分になり，頑健な検出が困難であるという課題に対処するため，
 検出難易度を画像毎に算出したものを学習に取り入れ，誤差関数の形状を動的に変化させる手法を提案した．
-提案法では，学習中に一定epoch毎に推論フェーズを挿入し，MC Dropoutにより複数枚の予測画像を得た後，
-ピクセル単位で不確実性指標を計算した．
-医用画像セグメンテーションデータを用いた実験の結果，学習後期においても精度が低い症例に関して，
+提案法では，学習中各画像に対してMC Dropoutを用いて画像毎に複数枚推論を行い，
+予測のばらつきから不確実性を定量化した．
+医用画像データセットを用いた実験の結果，学習後期においても精度が低い症例に関して，
 ピクセル単位の相互情報量の分散と相互情報量が増大していくことが明らかになった．
 今後は，上記の不確実性指標を領域周辺に着目して集約する方法を検討し，
-難易度指標が高い症例の特徴を重点的に学習できる損失関数を設計することで，提案法の有効性を検証する予定である．
-
+難易度が高い画像には急峻な勾配を与えることで，精度が低い症例でも頑健な検出を実現できる
+制御関数を実装し，提案法の有効性を検証する予定である．
 \newpage
 
 \begin{figure*}[t] % ← [t]をここに移動する
